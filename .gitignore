@@ -1,0 +1,7 @@
+*.so
+*.pyd
+*.txt
+gmon.out
+fit
+tokenizer.bpe
+build
