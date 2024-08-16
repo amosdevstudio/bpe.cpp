@@ -28,6 +28,7 @@
 #include <string>
 
 #include <thread>
+#include <mutex>
 
 using namespace std;
 
@@ -231,9 +232,10 @@ string BPE::Decode(const vector<unsigned int>& tokens){
 
 vector<vector<unsigned int>> BPE::FileToTokenBuffer(const string& dataPath) {
     cout << "Loading file to memory..." << endl;
-    vector<vector<unsigned int>> tokenBuffer;
 
+    vector<vector<unsigned int>> tokenBuffer;
     ifstream file(dataPath, ios::binary);
+
     if (!file.is_open()) {
         cerr << "Could not open file: " << dataPath << endl;
         return tokenBuffer;
@@ -269,7 +271,7 @@ vector<vector<unsigned int>> BPE::FileToTokenBuffer(const string& dataPath) {
 }
 
 Pair BPE::GetMostFrequentPairSinglethreaded(const vector<vector<unsigned int>>& tokenBuffer) const{
-    unordered_map<Pair, size_t> tokenFrequency;
+    unordered_map<Pair, size_t> pairFrequency;
     Pair mostFrequentPair{0, 0};
     size_t frequency = 0;
 
@@ -277,9 +279,9 @@ Pair BPE::GetMostFrequentPairSinglethreaded(const vector<vector<unsigned int>>& 
         for(size_t j = 0; j < tokenBuffer[i].size()-1; ++j){
             Pair pair{tokenBuffer[i][j], tokenBuffer[i][j+1]};
 
-            auto iter = tokenFrequency.find(pair);
-            if(iter == tokenFrequency.end()){
-                iter = tokenFrequency.insert({pair, 0}).first;
+            auto iter = pairFrequency.find(pair);
+            if(iter == pairFrequency.end()){
+                iter = pairFrequency.insert({pair, 0}).first;
             }
             // Increment the frequency for that token and compare
             // (This is much faster for some reason. Needed a profiler to figure that out...)
@@ -298,8 +300,12 @@ Pair BPE::GetMostFrequentPairSinglethreaded(const vector<vector<unsigned int>>& 
 }
 
 Pair BPE::GetMostFrequentPairMultithreaded(const vector<vector<unsigned int>>& tokenBuffer, const size_t numThreads) const {
-    vector<unordered_map<Pair, size_t>> threadFrequencies(numThreads);
+    unordered_map<Pair, size_t> pairFrequency;
+    mutex threadFrequencyMutex;
     vector<thread> threads;
+
+    Pair mostFrequentPair{0, 0};
+    size_t maxFrequency = 0;
 
     auto processChunk = [&](size_t threadId, size_t start, size_t end) {
         unordered_map<Pair, size_t> localFrequency;
@@ -309,7 +315,20 @@ Pair BPE::GetMostFrequentPairMultithreaded(const vector<vector<unsigned int>>& t
                 ++localFrequency[pair];
             }
         }
-        threadFrequencies[threadId] = std::move(localFrequency);
+
+        lock_guard<mutex> lock(threadFrequencyMutex);;
+        for (const auto& [pair, freq] : localFrequency) {
+            auto iter = pairFrequency.find(pair);
+            if(iter == pairFrequency.end()){
+                iter = pairFrequency.insert({pair, 0}).first;
+            }
+
+            iter->second += freq;
+            if(iter->second > maxFrequency){
+                mostFrequentPair = pair;
+                maxFrequency = iter->second;
+            }
+        }
     };
 
     size_t chunkSize = tokenBuffer.size() / numThreads;
@@ -323,22 +342,11 @@ Pair BPE::GetMostFrequentPairMultithreaded(const vector<vector<unsigned int>>& t
         t.join();
     }
 
-    Pair mostFrequentPair{0, 0};
-    size_t maxFrequency = 0;
-    unordered_map<Pair, size_t> totalFrequency;
-
-    for (const auto& threadFreq : threadFrequencies) {
-        for (const auto& [pair, freq] : threadFreq) {
-            size_t& totalFreq = totalFrequency[pair];
-            totalFreq += freq;
-            if (totalFreq > maxFrequency) {
-                mostFrequentPair = pair;
-                maxFrequency = totalFreq;
-            }
-        }
+    if(maxFrequency <= 1){
+        return {0, 0};
     }
 
-    return (maxFrequency > 1) ? mostFrequentPair : Pair{0, 0};
+    return mostFrequentPair;
 }
 
 void BPE::Fit(const size_t vocabSize, const string& dataPath, const size_t numThreads){

@@ -19,6 +19,7 @@
 
 
 #include "bpe.hpp"
+#include <chrono>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -51,6 +52,10 @@ int main(){
     vocabSize = stoi(vocabSizeString);
     numThreads = stoi(numThreadsString);
 
+    if(numThreads == 0){
+        numThreads = thread::hardware_concurrency();
+    }
+
     cout << endl
         << "Regex: " << regex << endl
         << "File path: " << filePath << endl
@@ -67,9 +72,17 @@ int main(){
     }
     cout << "Continuing" << endl;
 
+    auto start = chrono::high_resolution_clock::now();
+
     bpe.LoadRegex(regex);
-    bpe.Fit(vocabSize, filePath,
-            numThreads == 0 ? thread::hardware_concurrency() : numThreads
+    bpe.Fit(vocabSize,
+            filePath,
+            numThreads
             );
     bpe.Save("tokenizer.bpe");
+    auto duration = chrono::duration_cast<chrono::milliseconds>(
+        chrono::high_resolution_clock::now() -
+        start
+    );
+    cout << duration.count() << "ms" << endl;
 }

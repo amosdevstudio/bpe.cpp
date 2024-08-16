@@ -1,7 +1,5 @@
 *.so
 *.pyd
-*.txt
-gmon.out
-fit
-tokenizer.bpe
+data
 build
+tokenizer.bpe
