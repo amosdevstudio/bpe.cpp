@@ -1,5 +1,5 @@
 /*
-    bpe.cpp - A simple and fast Byte Pair Encoder written in c++ with python bindings.
+    bpe.cpp - A simple, fast and multithreaded Byte Pair Encoder written in c++ with python bindings.
     Copyright (C) 2024  Lorenzo Amos Sanzullo
 
     This program is free software: you can redistribute it and/or modify

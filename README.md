@@ -1,6 +1,6 @@
 # bpe.cpp
 
-A simple and ⚡BLAZINGLY FAST⚡ Byte Pair Encoder written in c++ with easy to use python bindings.
+A simple, multithreaded and ⚡BLAZINGLY FAST⚡ Byte Pair Encoder written in c++ with easy to use python bindings.
 
 ### Pre-trained tokenizers:
 
