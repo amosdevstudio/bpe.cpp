@@ -62,8 +62,7 @@ private:
     std::vector<unsigned int> EncodeChunk(const std::string& chunk, bool cache=true);
     void BuildVocab();
     std::vector<std::vector<unsigned int>> FileToTokenBuffer(const std::string& dataPath);
-    Pair GetMostFrequentPairMultithreaded(const std::vector<std::vector<unsigned int>>& tokenBuffer, const size_t numThreads) const;
-    Pair GetMostFrequentPairSinglethreaded(const std::vector<std::vector<unsigned int>>& tokenBuffer) const;
+    Pair GetMostFrequentPair(const std::vector<std::vector<unsigned int>>& tokenBuffer, const size_t numThreads) const;
 
 public:
     BPE();

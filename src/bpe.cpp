@@ -270,42 +270,13 @@ vector<vector<unsigned int>> BPE::FileToTokenBuffer(const string& dataPath) {
     return tokenBuffer;
 }
 
-Pair BPE::GetMostFrequentPairSinglethreaded(const vector<vector<unsigned int>>& tokenBuffer) const{
-    unordered_map<Pair, size_t> pairFrequency;
-    Pair mostFrequentPair{0, 0};
-    size_t frequency = 0;
-
-    for(size_t i = 0; i < tokenBuffer.size(); ++i){
-        for(size_t j = 0; j < tokenBuffer[i].size()-1; ++j){
-            Pair pair{tokenBuffer[i][j], tokenBuffer[i][j+1]};
-
-            auto iter = pairFrequency.find(pair);
-            if(iter == pairFrequency.end()){
-                iter = pairFrequency.insert({pair, 0}).first;
-            }
-            // Increment the frequency for that token and compare
-            // (This is much faster for some reason. Needed a profiler to figure that out...)
-            if(++(iter->second) > frequency){
-                mostFrequentPair = pair;
-                frequency = iter->second;
-            }
-        }
-    }
-
-    if(frequency <= 1){
-        return Pair{0, 0};
-    }
-
-    return mostFrequentPair;
-}
-
-Pair BPE::GetMostFrequentPairMultithreaded(const vector<vector<unsigned int>>& tokenBuffer, const size_t numThreads) const {
+Pair BPE::GetMostFrequentPair(const vector<vector<unsigned int>>& tokenBuffer, const size_t numThreads) const {
     unordered_map<Pair, size_t> pairFrequency;
     mutex threadFrequencyMutex;
     vector<thread> threads;
 
     Pair mostFrequentPair{0, 0};
-    size_t maxFrequency = 0;
+    size_t maxFrequency = 1;
 
     auto processChunk = [&](size_t threadId, size_t start, size_t end) {
         unordered_map<Pair, size_t> localFrequency;
@@ -342,10 +313,6 @@ Pair BPE::GetMostFrequentPairMultithreaded(const vector<vector<unsigned int>>& t
         t.join();
     }
 
-    if(maxFrequency <= 1){
-        return {0, 0};
-    }
-
     return mostFrequentPair;
 }
 
@@ -357,14 +324,9 @@ void BPE::Fit(const size_t vocabSize, const string& dataPath, const size_t numTh
     m_Pairs.reserve(NUM_PAIRS);
 
     for(unsigned int i = 256; i < m_VocabSize; ++i){
-        Pair pair;
-        if(numThreads <= 1){
-            pair = GetMostFrequentPairSinglethreaded(tokenBuffer);
-        } else {
-            pair = GetMostFrequentPairMultithreaded(tokenBuffer, numThreads);
-        }
+        Pair pair = GetMostFrequentPair(tokenBuffer, numThreads);
 
-        if(Pair{0, 0} == pair){
+        if(pair.idx1 == 0 && pair.idx2 == 0){
             /* No more tokens to merge */
             cout << "No more merges... Returning..." << endl;
             m_VocabSize = m_Pairs.size() + 256;
