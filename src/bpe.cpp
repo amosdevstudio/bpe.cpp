@@ -32,7 +32,23 @@
 
 using namespace std;
 
+string ReadFile(const string& path){
+    ifstream file(path, ios::binary);
+
+    if (!file.is_open()) {
+        cerr << "Could not open file: " << path << endl;
+        exit(-1);
+    }
+
+    string data((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
+    file.close();
+    cout << "Read file " << path << endl;
+    return data;
+}
+
+
 BPE::BPE():m_VocabSize(0), m_RegexPattern(nullptr){}
+
 BPE::~BPE(){
     if (m_RegexPattern) {
         pcre2_code_free(m_RegexPattern);
@@ -83,7 +99,11 @@ void BPE::Load(const string& path){
     ifstream file;
 
     file.open(path);
-    if(!file.is_open()){std:cout << "Could not open file: " << path << endl; }
+
+    if(!file.is_open()){
+        cout << "Could not open file: " << path << endl;
+        exit(-1);
+    }
 
     {
         /* Load regex pattern */
@@ -141,9 +161,10 @@ unsigned int BPE::FindFirstPair(const vector<unsigned int>& tokens, const unsign
     for(unsigned int j = 0; j < tokens.size()-1; ++j){
         Pair currentPair = {tokens[j], tokens[j+1]};
         /* If you find an instance in tokens */
-        if(m_PairIndexMap.find(currentPair) != m_PairIndexMap.end()){
+        auto iter = m_PairIndexMap.find(currentPair);
+        if(iter != m_PairIndexMap.end()){
             /* Return the pair index */
-            return m_PairIndexMap[currentPair];
+            return iter->second;
         }
     }
 
@@ -174,10 +195,33 @@ void BPE::Merge(vector<unsigned int>& tokens, const unsigned int& newToken) cons
     tokens.resize(write);
 }
 
+vector<string> BPE::SplitText(const string& text) const{
+    vector<string> result;
+
+    pcre2_match_data* match_data = pcre2_match_data_create_from_pattern(m_RegexPattern, nullptr);
+
+    PCRE2_SIZE* ovector;
+    int rc;
+    PCRE2_SIZE start = 0;
+
+    while ((rc = pcre2_match(m_RegexPattern, (PCRE2_SPTR)text.c_str(), text.length(), start, 0, match_data, nullptr)) > 0) {
+        ovector = pcre2_get_ovector_pointer(match_data);
+        result.push_back(text.substr(ovector[0], ovector[1] - ovector[0]));
+
+        start = ovector[1];
+    }
+
+    pcre2_match_data_free(match_data);
+    return result;
+}
+
 vector<unsigned int> BPE::EncodeChunk(const string& chunk, bool cache){
-    if(cache && m_Cache.find(chunk) != m_Cache.end()){
-        /* Chunk present in the cache */
-        return m_Cache[chunk];
+    if(cache){
+        auto cacheIter = m_Cache.find(chunk);
+        if(cacheIter != m_Cache.end()){
+            /* Chunk present in the cache */
+            return cacheIter->second;
+        }
     }
 
     /* Vector of unicode bytes (total bytes = 255) */
@@ -191,38 +235,25 @@ vector<unsigned int> BPE::EncodeChunk(const string& chunk, bool cache){
     }
 
     if(cache){
-        m_Cache[chunk] = tokens;
+        m_Cache.insert({chunk, tokens});
     }
 
     return tokens;
 }
 
-vector<unsigned int> BPE::Encode(const string& text) {
+vector<unsigned int> BPE::Encode(const string& text){
     vector<unsigned int> tokens;
 
-    pcre2_match_data* match_data = pcre2_match_data_create_from_pattern(m_RegexPattern, nullptr);
-
-    PCRE2_SIZE* ovector;
-    int rc;
-    PCRE2_SIZE start = 0;
-
-    while ((rc = pcre2_match(m_RegexPattern, (PCRE2_SPTR)text.c_str(), text.length(), start, 0, match_data, nullptr)) > 0) {
-        ovector = pcre2_get_ovector_pointer(match_data);
-        string match = text.substr(ovector[0], ovector[1] - ovector[0]);
-
-        for (unsigned int token : EncodeChunk(match)) {
-            tokens.push_back(token);
-        }
-
-        start = ovector[1];
+    for(string match : SplitText(text)){
+        vector<unsigned int> encoded = EncodeChunk(match);
+        /* Append new tokens to tokens */
+        tokens.insert(tokens.end(), encoded.begin(), encoded.end());
     }
-
-    pcre2_match_data_free(match_data);
 
     return tokens;
 }
 
-string BPE::Decode(const vector<unsigned int>& tokens){
+string BPE::Decode(const vector<unsigned int>& tokens) const{
     string result = "";
     for(size_t i = 0; i < tokens.size(); ++i){
         result.append(m_Vocab[tokens[i]]);
@@ -230,41 +261,17 @@ string BPE::Decode(const vector<unsigned int>& tokens){
     return result;
 }
 
-vector<vector<unsigned int>> BPE::FileToTokenBuffer(const string& dataPath) {
+vector<vector<unsigned int>> BPE::FileToTokenBuffer(const string& dataPath) const{
     cout << "Loading file to memory..." << endl;
 
     vector<vector<unsigned int>> tokenBuffer;
-    ifstream file(dataPath, ios::binary);
+    vector<string> matches = SplitText(ReadFile(dataPath));
+    tokenBuffer.reserve(matches.size());
 
-    if (!file.is_open()) {
-        cerr << "Could not open file: " << dataPath << endl;
-        return tokenBuffer;
+    for(string match : matches){
+        tokenBuffer.push_back(vector<unsigned int>(match.begin(), match.end()));
     }
 
-    string data((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
-    file.close();
-
-    pcre2_match_data* match_data = pcre2_match_data_create_from_pattern(m_RegexPattern, nullptr);
-
-    PCRE2_SIZE* ovector;
-    int rc;
-    PCRE2_SIZE start = 0;
-
-    while ((rc = pcre2_match(m_RegexPattern, (PCRE2_SPTR)data.c_str(), data.length(), start, 0, match_data, nullptr)) > 0) {
-        ovector = pcre2_get_ovector_pointer(match_data);
-        string match = data.substr(ovector[0], ovector[1] - ovector[0]);
-
-        vector<unsigned int> tokens;
-        tokens.reserve(match.size());
-        for (unsigned char c : match) {
-            tokens.push_back(static_cast<unsigned int>(c));
-        }
-        tokenBuffer.push_back(std::move(tokens));
-
-        start = ovector[1];
-    }
-
-    pcre2_match_data_free(match_data);
     cout << "Done." << endl;
 
     return tokenBuffer;
@@ -347,7 +354,7 @@ void BPE::Fit(const size_t vocabSize, const string& dataPath, const size_t numTh
     BuildVocab();
 }
 
-void BPE::Save(const string& path){
+void BPE::Save(const string& path) const{
     ofstream file;
     file.open(path);
 
