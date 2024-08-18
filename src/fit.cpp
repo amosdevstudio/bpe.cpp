@@ -27,8 +27,6 @@
 using namespace std;
 
 int main(){
-    BPE bpe;
-
     string regex,
     filePath,
     vocabSizeString,
@@ -72,12 +70,13 @@ int main(){
     }
     cout << "Continuing" << endl;
 
+    BPE bpe(numThreads);
+
     auto start = chrono::high_resolution_clock::now();
 
     bpe.LoadRegex(regex);
     bpe.Fit(vocabSize,
-            filePath,
-            numThreads
+            filePath
             );
     bpe.Save("tokenizer.bpe");
     auto duration = chrono::duration_cast<chrono::milliseconds>(

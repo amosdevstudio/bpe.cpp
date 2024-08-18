@@ -55,6 +55,7 @@ private:
     size_t m_VocabSize;
     pcre2_code* m_RegexPattern;
     std::string m_RegexString;
+    const size_t m_NumThreads;
     std::unordered_map<std::string, std::vector<unsigned int>> m_Cache;
 
     unsigned int FindFirstPair(const std::vector<unsigned int>& tokens, const unsigned int& startIdx);
@@ -66,14 +67,14 @@ private:
     Pair GetMostFrequentPair(const std::vector<std::vector<unsigned int>>& tokenBuffer, const size_t numThreads) const;
 
 public:
-    BPE();
+    BPE(const size_t numThreads);
     ~BPE();
 
     void LoadRegex(const std::string& regexText);
     void Load(const std::string& path);
     std::vector<unsigned int> Encode(const std::string& text);
     std::string Decode(const std::vector<unsigned int>& tokens) const;
-    void Fit(const size_t vocabSize, const std::string& dataPath, const size_t numThreads);
+    void Fit(const size_t vocabSize, const std::string& dataPath);
     void Save(const std::string& path) const;
 };
 

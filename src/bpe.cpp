@@ -47,7 +47,7 @@ string ReadFile(const string& path){
 }
 
 
-BPE::BPE():m_VocabSize(0), m_RegexPattern(nullptr){}
+BPE::BPE(const size_t numThreads):m_VocabSize(0), m_RegexPattern(nullptr), m_NumThreads(numThreads){}
 
 BPE::~BPE(){
     if (m_RegexPattern) {
@@ -323,7 +323,7 @@ Pair BPE::GetMostFrequentPair(const vector<vector<unsigned int>>& tokenBuffer, c
     return mostFrequentPair;
 }
 
-void BPE::Fit(const size_t vocabSize, const string& dataPath, const size_t numThreads){
+void BPE::Fit(const size_t vocabSize, const string& dataPath){
     m_Cache.clear();
     m_VocabSize = vocabSize;
     vector<vector<unsigned int>> tokenBuffer = FileToTokenBuffer(dataPath);
@@ -331,7 +331,7 @@ void BPE::Fit(const size_t vocabSize, const string& dataPath, const size_t numTh
     m_Pairs.reserve(NUM_PAIRS);
 
     for(unsigned int i = 256; i < m_VocabSize; ++i){
-        Pair pair = GetMostFrequentPair(tokenBuffer, numThreads);
+        Pair pair = GetMostFrequentPair(tokenBuffer, m_NumThreads);
 
         if(pair.idx1 == 0 && pair.idx2 == 0){
             /* No more tokens to merge */

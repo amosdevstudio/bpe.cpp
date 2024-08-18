@@ -45,15 +45,23 @@ This command will generate a .so file (on Mac and Linux) or a .pyd file (on Wind
 The build directory contains intermediate files and can be ignored.
 Now you can simply move the .so or .pyd file to your project directory and use it as pybpe.
 
+Example python file:
 ```
 from pybpe import BPE
 
 bpe = BPE()
-bpe.load("tokenizer.bpe")
-encoded = bpe.encode("Hello world")
-decoded = bpe.decode(encoded)
+bpe.load("build/tokenizer.bpe")
 
-print(encoded, '\n', decoded)
+while True:
+    encoded = bpe.encode(input("Text:\n"))
+    decoded_list = []
+    for token in encoded:
+        decoded_list.append(bpe.decode([token]))
+    decoded = bpe.decode(encoded)
+
+    print(encoded)
+    print(decoded_list)
+    print(decoded)
 ```
 Although fitting with the python wrapper is possible, it is reccomended to fit with c++ for performance reasons.
 
@@ -83,6 +91,11 @@ bpe.cpp doesn't support JSON yet (for tiktoken), but it probably will in the fut
 
 ### Class methods:
 
+```void BPE::BPE(const size_t numThreads);```
+
+The constructor for the BPE.
+Takes in the number of threads to use.
+
 ```void BPE::Load(const std::string& path);```
 
 Loads a .bpe file.
@@ -90,16 +103,15 @@ This function takes in the path to a custom .bpe file and loads it to a BPE clas
 
 ```void BPE::LoadRegex(const std::string& regexText);```
 
-Loads a custom regex
+Loads a custom regex.
 This funtion takes in a PCRE2 regex pattern, compiles it, and stores it in the BPE for later use.
 
 ```void BPE::Fit(const size_t vocabSize, const std::string& dataPath, const size_t numThreads);```
 
 Fit the BPE to a text file.
-This function takes in 3 arguments:
+This function takes in 2 arguments:
  - The vocab size, the number of tokens used by the encoder.
  - The data path, the path to the text file for custom fitting
- - numThreads, the number of threads to use.
 
 ```void BPE::Save(const std::string& path);```
 
