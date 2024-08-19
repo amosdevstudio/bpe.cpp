@@ -29,6 +29,8 @@
 
 #include <thread>
 #include <mutex>
+#include <condition_variable>
+#include <iterator>
 
 using namespace std;
 
@@ -58,7 +60,7 @@ BPE::~BPE(){
 void BPE::BuildVocab(){
     m_Vocab.reserve(m_VocabSize);
     for(unsigned int i = 0; i < 256; ++i){
-        m_Vocab.push_back(string(1, i));
+        m_Vocab.emplace_back(1, i);
     }
 
     for(size_t i = 0; i < NUM_PAIRS; ++i){
@@ -134,8 +136,8 @@ void BPE::Load(const string& path){
             }
 
             m_Pairs.push_back({
-                .idx1 = (unsigned int)stoi(idx1String),
-                .idx2 = (unsigned int)stoi(idx2String)
+                (unsigned int)stoi(idx1String),
+                (unsigned int)stoi(idx2String)
             });
 
             /* Debugging */
@@ -195,23 +197,62 @@ void BPE::Merge(vector<unsigned int>& tokens, const unsigned int& newToken) cons
     tokens.resize(write);
 }
 
-vector<string> BPE::SplitText(const string& text) const{
-    vector<string> result;
-
+vector<PCRE2_SIZE> BPE::SplitTextSinglethreaded(const string& text, PCRE2_SIZE start, const PCRE2_SIZE end) const {
     pcre2_match_data* match_data = pcre2_match_data_create_from_pattern(m_RegexPattern, nullptr);
-
+    vector<PCRE2_SIZE> result;
     PCRE2_SIZE* ovector;
     int rc;
-    PCRE2_SIZE start = 0;
 
-    while ((rc = pcre2_match(m_RegexPattern, (PCRE2_SPTR)text.c_str(), text.length(), start, 0, match_data, nullptr)) > 0) {
+    while (start < end && (rc = pcre2_match(m_RegexPattern, (PCRE2_SPTR)text.c_str(), text.length(), start, 0, match_data, nullptr)) > 0) {
         ovector = pcre2_get_ovector_pointer(match_data);
-        result.push_back(text.substr(ovector[0], ovector[1] - ovector[0]));
+        result.push_back(ovector[1]);
 
         start = ovector[1];
     }
-
     pcre2_match_data_free(match_data);
+    return result;
+}
+
+vector<PCRE2_SIZE> BPE::SplitText(const string& text) const {
+    if (text.length() <= m_NumThreads * 2) {
+        return SplitTextSinglethreaded(text, 0, text.length());
+    }
+
+    vector<PCRE2_SIZE> result;
+    vector<thread> threads;
+    mutex resultMutex;
+    condition_variable cv;
+    size_t activeThread = 0;
+
+    auto processChunk = [&](size_t threadId, PCRE2_SIZE start, const PCRE2_SIZE end) {
+        auto localMatches = SplitTextSinglethreaded(text, start, end);
+
+        unique_lock<mutex> lock(resultMutex);
+        cv.wait(lock, [&] { return activeThread == threadId; });
+
+        auto matchesBegin = localMatches.begin();
+        if (threadId > 0 && result.back() > start) {
+            matchesBegin = next(matchesBegin);
+        }
+
+        result.insert(result.end(), matchesBegin, localMatches.end());
+
+        ++activeThread;
+        lock.unlock();
+        cv.notify_all();
+    };
+
+    size_t chunkSize = text.length() / m_NumThreads;
+    for (size_t i = 0; i < m_NumThreads; ++i) {
+        size_t start = i * chunkSize;
+        size_t end = (i == m_NumThreads - 1) ? text.length() : (i + 1) * chunkSize;
+        threads.emplace_back(processChunk, i, start, end);
+    }
+
+    for (auto& t : threads) {
+        t.join();
+    }
+
     return result;
 }
 
@@ -244,10 +285,12 @@ vector<unsigned int> BPE::EncodeChunk(const string& chunk, bool cache){
 vector<unsigned int> BPE::Encode(const string& text){
     vector<unsigned int> tokens;
 
-    for(string match : SplitText(text)){
-        vector<unsigned int> encoded = EncodeChunk(match);
+    PCRE2_SIZE prevMatch = 0;
+    for(PCRE2_SIZE match : SplitText(text)){
+        vector<unsigned int> encoded = EncodeChunk(text.substr(prevMatch, match - prevMatch));
         /* Append new tokens to tokens */
         tokens.insert(tokens.end(), encoded.begin(), encoded.end());
+        prevMatch = match;
     }
 
     return tokens;
@@ -265,11 +308,16 @@ vector<vector<unsigned int>> BPE::FileToTokenBuffer(const string& dataPath) cons
     cout << "Loading file to memory..." << endl;
 
     vector<vector<unsigned int>> tokenBuffer;
-    vector<string> matches = SplitText(ReadFile(dataPath));
+    string text = ReadFile(dataPath);
+    vector<PCRE2_SIZE> matches = SplitText(text);
+    cout << "Split text" << endl;
     tokenBuffer.reserve(matches.size());
 
-    for(string match : matches){
-        tokenBuffer.push_back(vector<unsigned int>(match.begin(), match.end()));
+    auto textIter = text.begin();
+    PCRE2_SIZE prevMatch = 0;
+    for(PCRE2_SIZE match : matches){
+        tokenBuffer.emplace_back(textIter + prevMatch, textIter + match);
+        prevMatch = match;
     }
 
     cout << "Done." << endl;
@@ -277,7 +325,7 @@ vector<vector<unsigned int>> BPE::FileToTokenBuffer(const string& dataPath) cons
     return tokenBuffer;
 }
 
-Pair BPE::GetMostFrequentPair(const vector<vector<unsigned int>>& tokenBuffer, const size_t numThreads) const {
+Pair BPE::GetMostFrequentPair(const vector<vector<unsigned int>>& tokenBuffer) const {
     unordered_map<Pair, size_t> pairFrequency;
     mutex threadFrequencyMutex;
     vector<thread> threads;
@@ -309,10 +357,10 @@ Pair BPE::GetMostFrequentPair(const vector<vector<unsigned int>>& tokenBuffer, c
         }
     };
 
-    size_t chunkSize = tokenBuffer.size() / numThreads;
-    for (size_t i = 0; i < numThreads; ++i) {
+    size_t chunkSize = tokenBuffer.size() / m_NumThreads;
+    for (size_t i = 0; i < m_NumThreads; ++i) {
         size_t start = i * chunkSize;
-        size_t end = (i == numThreads - 1) ? tokenBuffer.size() : (i + 1) * chunkSize;
+        size_t end = (i == m_NumThreads - 1) ? tokenBuffer.size() : (i + 1) * chunkSize;
         threads.emplace_back(processChunk, i, start, end);
     }
 
@@ -331,7 +379,7 @@ void BPE::Fit(const size_t vocabSize, const string& dataPath){
     m_Pairs.reserve(NUM_PAIRS);
 
     for(unsigned int i = 256; i < m_VocabSize; ++i){
-        Pair pair = GetMostFrequentPair(tokenBuffer, m_NumThreads);
+        Pair pair = GetMostFrequentPair(tokenBuffer);
 
         if(pair.idx1 == 0 && pair.idx2 == 0){
             /* No more tokens to merge */

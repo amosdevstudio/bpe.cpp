@@ -17,7 +17,6 @@
 
 */
 
-
 #ifndef BPE_HPP
 #define BPE_HPP
 
@@ -60,11 +59,12 @@ private:
 
     unsigned int FindFirstPair(const std::vector<unsigned int>& tokens, const unsigned int& startIdx);
     void Merge(std::vector<unsigned int>& tokens, const unsigned int& newToken) const;
-    std::vector<std::string> SplitText(const std::string& text) const;
+    std::vector<PCRE2_SIZE> SplitTextSinglethreaded(const std::string& text, PCRE2_SIZE start, const PCRE2_SIZE end) const;
+    std::vector<PCRE2_SIZE> SplitText(const std::string& text) const;
     std::vector<unsigned int> EncodeChunk(const std::string& chunk, bool cache=true);
     void BuildVocab();
     std::vector<std::vector<unsigned int>> FileToTokenBuffer(const std::string& dataPath) const;
-    Pair GetMostFrequentPair(const std::vector<std::vector<unsigned int>>& tokenBuffer, const size_t numThreads) const;
+    Pair GetMostFrequentPair(const std::vector<std::vector<unsigned int>>& tokenBuffer) const;
 
 public:
     BPE(const size_t numThreads);
