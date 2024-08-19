@@ -17,9 +17,6 @@
 
 */
 
-
-#define NUM_PAIRS m_VocabSize-256
-
 #include "bpe.hpp"
 
 #include <cstdio>
@@ -48,7 +45,6 @@ string ReadFile(const string& path){
     return data;
 }
 
-
 BPE::BPE(const size_t numThreads):m_VocabSize(0), m_RegexPattern(nullptr), m_NumThreads(numThreads){}
 
 BPE::~BPE(){
@@ -58,15 +54,17 @@ BPE::~BPE(){
 }
 
 void BPE::BuildVocab(){
-    m_Vocab.reserve(m_VocabSize);
+    cout << "Building vocab..." << endl;
+    m_Vocab.resize(m_VocabSize);
     for(unsigned int i = 0; i < 256; ++i){
-        m_Vocab.emplace_back(1, i);
+        m_Vocab[i] = string(1, i);
     }
 
-    for(size_t i = 0; i < NUM_PAIRS; ++i){
-        Pair pair = m_Pairs[i];
-        m_Vocab.push_back(m_Vocab[pair.idx1] + m_Vocab[pair.idx2]);
+    for(size_t i = 256; i < m_VocabSize; ++i){
+        Pair pair = m_Pairs[i-256];
+        m_Vocab[i] = (m_Vocab[pair.idx1] + m_Vocab[pair.idx2]);
     }
+    cout << "Vocab built." << endl;
 }
 
 void BPE::LoadRegex(const string& regexText) {
@@ -128,7 +126,7 @@ void BPE::Load(const string& path){
 
     {
         /* Load pairs */
-        m_Pairs.reserve(NUM_PAIRS);
+        m_Pairs.reserve(m_VocabSize - 256);
         while(true){
             string idx1String, idx2String;
             if(!getline(file, idx1String, ' ') || !getline(file, idx2String, '\n')){
@@ -154,7 +152,7 @@ void BPE::Load(const string& path){
 
 unsigned int BPE::FindFirstPair(const vector<unsigned int>& tokens, const unsigned int& startIdx){
     if(m_PairIndexMap.empty()){
-        for(unsigned int i = startIdx; i < NUM_PAIRS; ++i){
+        for(unsigned int i = startIdx; i < m_VocabSize - 256; ++i){
             m_PairIndexMap[m_Pairs[i]] = i;
         }
     }
@@ -177,12 +175,11 @@ unsigned int BPE::FindFirstPair(const vector<unsigned int>& tokens, const unsign
 void BPE::Merge(vector<unsigned int>& tokens, const unsigned int& newToken) const{
     /* In-place implementation of the merge function */
     Pair pair = m_Pairs[newToken-256];
-    unsigned int numTokens = tokens.size();
     /* The index for reading and the index for writing (read is faster) */
     unsigned int read=0, write=0;
 
-    while(read < numTokens){
-        if(read < numTokens - 1 && Pair{tokens[read], tokens[read+1]} == pair){
+    while(read < tokens.size()){
+        if(read < tokens.size() - 1 && Pair{tokens[read], tokens[read+1]} == pair){
            /* Pair match */
             tokens[write] = newToken;
             read += 2; // Jump one token
@@ -244,8 +241,8 @@ vector<PCRE2_SIZE> BPE::SplitText(const string& text) const {
 
     size_t chunkSize = text.length() / m_NumThreads;
     for (size_t i = 0; i < m_NumThreads; ++i) {
-        size_t start = i * chunkSize;
-        size_t end = (i == m_NumThreads - 1) ? text.length() : (i + 1) * chunkSize;
+        PCRE2_SIZE start = i * chunkSize;
+        const PCRE2_SIZE end = (i == m_NumThreads - 1) ? text.length() : (i + 1) * chunkSize;
         threads.emplace_back(processChunk, i, start, end);
     }
 
@@ -266,7 +263,7 @@ vector<unsigned int> BPE::EncodeChunk(const string& chunk, bool cache){
     }
 
     /* Vector of unicode bytes (total bytes = 255) */
-    vector<unsigned int> tokens(chunk.begin(), chunk.end());
+    vector<unsigned int> tokens((unsigned char*)&*chunk.begin(), (unsigned char*)&*chunk.end());
 
     unsigned int startSearchIdx = 0;
     unsigned int pairIdx;
@@ -313,10 +310,10 @@ vector<vector<unsigned int>> BPE::FileToTokenBuffer(const string& dataPath) cons
     cout << "Split text" << endl;
     tokenBuffer.reserve(matches.size());
 
-    auto textIter = text.begin();
+    const unsigned char* textBegin = (unsigned char*)&*text.begin();
     PCRE2_SIZE prevMatch = 0;
-    for(PCRE2_SIZE match : matches){
-        tokenBuffer.emplace_back(textIter + prevMatch, textIter + match);
+    for(const auto& match : matches){
+        tokenBuffer.emplace_back(textBegin + prevMatch, textBegin + match);
         prevMatch = match;
     }
 
@@ -333,7 +330,7 @@ Pair BPE::GetMostFrequentPair(const vector<vector<unsigned int>>& tokenBuffer) c
     Pair mostFrequentPair{0, 0};
     size_t maxFrequency = 1;
 
-    auto processChunk = [&](size_t threadId, size_t start, size_t end) {
+    auto processChunk = [&](const size_t start, const size_t end) {
         unordered_map<Pair, size_t> localFrequency;
         for (size_t i = start; i < end; ++i) {
             for (size_t j = 0; j < tokenBuffer[i].size() - 1; ++j) {
@@ -359,9 +356,9 @@ Pair BPE::GetMostFrequentPair(const vector<vector<unsigned int>>& tokenBuffer) c
 
     size_t chunkSize = tokenBuffer.size() / m_NumThreads;
     for (size_t i = 0; i < m_NumThreads; ++i) {
-        size_t start = i * chunkSize;
+        const size_t start = i * chunkSize;
         size_t end = (i == m_NumThreads - 1) ? tokenBuffer.size() : (i + 1) * chunkSize;
-        threads.emplace_back(processChunk, i, start, end);
+        threads.emplace_back(processChunk, start, end);
     }
 
     for (auto& t : threads) {
@@ -371,12 +368,34 @@ Pair BPE::GetMostFrequentPair(const vector<vector<unsigned int>>& tokenBuffer) c
     return mostFrequentPair;
 }
 
+void BPE::MergeBuffer(vector<vector<unsigned int>>& tokenBuffer, unsigned int newToken) const{
+    vector<thread> threads;
+    mutex resultMutex;
+
+    auto processChunk = [&](const size_t start, const size_t end){
+        for(size_t i = start; i < end; ++i){
+            Merge(tokenBuffer[i], newToken);
+        }
+    };
+
+    size_t chunkSize = tokenBuffer.size() / m_NumThreads;
+    for (size_t i = 0; i < m_NumThreads; ++i) {
+        const size_t start = i * chunkSize;
+        const size_t end = (i == m_NumThreads - 1) ? tokenBuffer.size() : (i + 1) * chunkSize;
+        threads.emplace_back(processChunk, start, end);
+    }
+
+    for (auto& t : threads) {
+        t.join();
+    }
+}
+
 void BPE::Fit(const size_t vocabSize, const string& dataPath){
     m_Cache.clear();
     m_VocabSize = vocabSize;
     vector<vector<unsigned int>> tokenBuffer = FileToTokenBuffer(dataPath);
 
-    m_Pairs.reserve(NUM_PAIRS);
+    m_Pairs.reserve(m_VocabSize - 256);
 
     for(unsigned int i = 256; i < m_VocabSize; ++i){
         Pair pair = GetMostFrequentPair(tokenBuffer);
@@ -390,9 +409,7 @@ void BPE::Fit(const size_t vocabSize, const string& dataPath){
 
         m_Pairs.push_back(pair);
 
-        for(size_t idx = 0; idx < tokenBuffer.size(); ++idx){
-            Merge(tokenBuffer[idx], i);
-        }
+        MergeBuffer(tokenBuffer, i);
 
         if(i % 100 == 0){
             cout << "Reached token " << to_string(i) << endl;
@@ -403,6 +420,7 @@ void BPE::Fit(const size_t vocabSize, const string& dataPath){
 }
 
 void BPE::Save(const string& path) const{
+    cout << "Saving..." << endl;
     ofstream file;
     file.open(path);
 
@@ -415,4 +433,5 @@ void BPE::Save(const string& path) const{
     }
 
     file.close();
+    cout << "Saved." << endl;
 }

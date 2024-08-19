@@ -17,22 +17,35 @@
 
 */
 
-
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
 #include "bpe.hpp"
 
-namespace py = pybind11;
+#include <iostream>
 
-PYBIND11_MODULE(pybpe, m) {
-    m.doc() = "Python bindings for BPE class";
+using namespace std;
 
-    py::class_<BPE>(m, "BPE")
-        .def(py::init<size_t>())
-        .def("load_regex", &BPE::LoadRegex)
-        .def("load", &BPE::Load)
-        .def("encode", &BPE::Encode)
-        .def("decode", &BPE::Decode)
-        .def("fit", &BPE::Fit)
-        .def("save", &BPE::Save);
+int main(){
+    BPE bpe(16);
+    bpe.Load("tokenizer.bpe");
+    while(true){
+        cout << "Text:" << endl;
+        string in;
+        getline(cin, in);
+
+
+        vector<unsigned int> encoded = bpe.Encode(in);
+        vector<string> decodedList;
+        for(const auto& token : encoded){
+            cout << to_string(token) << " ";
+            decodedList.push_back(bpe.Decode(vector<unsigned int>(1, token)));
+        }
+        cout << endl << "[";
+
+        for(const auto& decoded : decodedList){
+            cout << "\"" << decoded << "\"" << ", ";
+        }
+        cout << "]" << endl;
+
+        string decoded = bpe.Decode(encoded);
+        cout << decoded << endl;
+    }
 }

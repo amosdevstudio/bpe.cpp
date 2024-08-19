@@ -78,10 +78,11 @@ int main(){
     bpe.Fit(vocabSize,
             filePath
             );
-    bpe.Save("tokenizer.bpe");
     auto duration = chrono::duration_cast<chrono::milliseconds>(
         chrono::high_resolution_clock::now() -
         start
     );
     cout << duration.count() << "ms" << endl;
+
+    bpe.Save("tokenizer.bpe");
 }

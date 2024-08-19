@@ -27,6 +27,20 @@ Then run the program:
 ```
 It will ask a bunch of questions and finally generate a `tokenizer.bpe' file.
 
+### How to use pre-trained tokenizers:
+
+As for fitting, I provided a little helper script to do just that in c++.
+Example (gcc):
+```
+gcc src/encode.cpp src/bpe.cpp -O3 -lpcre2-8 -o encode
+```
+Then run the program:
+```
+./encode
+```
+
+It will automatically load the file "tokenizer.bpe" from the current directory.
+
 ### Usage in python:
 
 For use in python, first install the pybind11 package.
@@ -63,7 +77,7 @@ while True:
     print(decoded_list)
     print(decoded)
 ```
-Although fitting with the python wrapper is possible, it is reccomended to fit with c++ for performance reasons.
+Although fitting with the python wrapper is possible, it is recommended to fit with c++ for performance reasons.
 
 ### .bpe files:
 
