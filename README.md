@@ -4,18 +4,18 @@ A simple, multithreaded and ⚡BLAZINGLY FAST⚡ Byte Pair Encoder written in c+
 
 ### Pre-trained tokenizers:
 
-Check out the releases tab for pre-trained tokenizers.
+Check out the [releases tab](https://github.com/amosdevstudio/bpe.cpp/releases/tag/pre-trained) for pre-trained tokenizers.
 
 ## Documentation
 
 ### How to fit to custom data:
 
 To fit to custom data I provided a fit.cpp file to easily train a tokenizer.
-Fitting is reccomended in c++ as it is faster than using the python wrapper (although the difference is minimal).
+Fitting is recommended in c++ as it is faster than using the python wrapper (although the difference is minimal).
 The file generated in c++ can easily be later loaded in python for use with other python libraries (such as pytorch, tensorflow and others.)
 
 Compile the fit.cpp file with the bpe.cpp file and link with the pcre2-8 library.
-Compiler optimizations are recommended as they can significantly speed up the program (up to 200% on my machine)
+Compiler optimizations are recommended as they can significantly speed up the program.
 
 Example (gcc):
 ```
@@ -25,7 +25,7 @@ Then run the program:
 ```
 ./fit
 ```
-It will ask a bunch of questions and finally generate a `tokenizer.bpe' file.
+It will ask a bunch of questions (regex pattern to use, file to fit on, vocab size and number of threads to use) and finally generate a `tokenizer.bpe' file.
 
 ### How to use pre-trained tokenizers:
 
@@ -63,14 +63,18 @@ Example python file:
 ```
 from pybpe import BPE
 
-bpe = BPE()
-bpe.load("build/tokenizer.bpe")
+bpe = BPE(8) # Number of threads to use
+bpe.load("tokenizer.bpe")
 
 while True:
     encoded = bpe.encode(input("Text:\n"))
     decoded_list = []
     for token in encoded:
-        decoded_list.append(bpe.decode([token]))
+        try:
+            decoded_list.append(bpe.decode([token]))
+        except: # UnicodeDecodeError
+            decoded_list.append('� ')
+
     decoded = bpe.decode(encoded)
 
     print(encoded)
@@ -78,6 +82,13 @@ while True:
     print(decoded)
 ```
 Although fitting with the python wrapper is possible, it is recommended to fit with c++ for performance reasons.
+
+> [!NOTE]
+> Decoding tokens that encode unicode characters using the python wrapper is not fully supported.
+> As detailed in the [pybind11 Issue #591](https://github.com/pybind/pybind11/issues/591), pybind can make the application crash if it finds an invalid unicode character.
+> That is a problem especially when trying to decode (valid) utf-8 tokens one at a time, since the unicode byte sequence might be chopped off and become invalid.
+> To fix this, you can wrap the decode function in a try except block and handle the error from there (like in the demo I provided).
+
 
 ### .bpe files:
 
@@ -132,7 +143,7 @@ This function takes in 2 arguments:
 Saves the BPE to a .bpe file.
 This function takes in a path for saving the BPE to a .bpe file.
 
-```std::vector<unsigned int> BPE::Encode(const std::string& text);```
+    ```std::vector<unsigned int> BPE::Encode(const std::string& text);```
 
 Encodes the given string to a vector of tokens.
 
@@ -141,11 +152,11 @@ Encodes the given string to a vector of tokens.
 Decodes the given vector of tokens back to a string.
 
 ## The boring stuff:
-I made this because i wanted to train my own Byte Pair Encoder on the Gutenberg dataset. I started by using Andrej Karpathy's minbpe, but my PC is simply too slow.
-I then realized that the problem was python, so i switched too pypy for better performance, and it got much better, but still nowhere near what i needed.
+I made this because I wanted to train my own Byte Pair Encoder on the Gutenberg dataset. I started by using Andrej Karpathy's minbpe, but my PC is simply too slow.
+I then realized that the problem was python, so I switched to pypy for better performance. Although it got much better, it was still nowhere near what I needed.
 So I realized that rewriting it in a lower level language like c++ would give me finer optimization control. And that's exactly what happened.
 
-What would take days on pypy now takes just a few hours (and much less electricity). If you want to try out my own pre-trained tokenizer trained on a subset of the gutenberg dataset, it's on the releases page.
+What would take days on pypy now takes just a few hours (and much less electricity) in c++. If you want to try out my own pre-trained tokenizer trained on a subset of the gutenberg dataset, it's on the [releases page](https://github.com/amosdevstudio/bpe.cpp/releases/tag/pre-trained).
 
 
 I am fairly new to c++ programming, so don't kill me if my code is garbage. Any feedback is very appreciated :).
