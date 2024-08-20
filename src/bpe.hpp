@@ -33,6 +33,7 @@ struct Pair{
     unsigned int idx2;
 
     bool operator==(const Pair& b) const{return idx1 == b.idx1 && idx2 == b.idx2; };
+    bool operator!=(const Pair& b) const{return idx1 != b.idx1 || idx2 != b.idx2; };
 };
 
 namespace std {

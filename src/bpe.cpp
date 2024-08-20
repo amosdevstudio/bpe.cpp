@@ -333,9 +333,15 @@ Pair BPE::GetMostFrequentPair(const vector<vector<unsigned int>>& tokenBuffer) c
     auto processChunk = [&](const size_t start, const size_t end) {
         unordered_map<Pair, size_t> localFrequency;
         for (size_t i = start; i < end; ++i) {
+            Pair prevPair{0, 0};
             for (size_t j = 0; j < tokenBuffer[i].size() - 1; ++j) {
                 Pair pair{tokenBuffer[i][j], tokenBuffer[i][j+1]};
-                ++localFrequency[pair];
+                if(pair != prevPair){
+                    ++localFrequency[pair];
+                    prevPair = pair;
+                } else {
+                    prevPair = {0, 0};
+                }
             }
         }
 
