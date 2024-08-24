@@ -51,8 +51,7 @@ void BPE::LoadSplitLetters(const string& splitLetters){
 }
 
 TokenList BPE::Encode(const std::string& text){
-    TokenList tokens;
-    StringToTokens(text, tokens);
+
 }
 
 string BPE::Decode(const TokenList& tokens){
