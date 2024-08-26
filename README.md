@@ -6,82 +6,53 @@ A simple, multithreaded and ⚡BLAZINGLY FAST⚡ Byte Pair Encoder written in c+
 
 Check out the [releases tab](https://github.com/amosdevstudio/bpe.cpp/releases/tag/pre-trained) for pre-trained tokenizers.
 
-## Documentation
-
 ### How to fit to custom data:
+I provided a fit.cpp file to easily fit a custom tokenizer to custom data.
+You will need:
+- A list of letters that will split the words in your custom data (like a regex);
+- The path to a text file (preferrably massive) that contains the data to fit on;
+- The vocab size for your new tokenizer (should be bigger than 256);
 
-To fit to custom data I provided a fit.cpp file to easily train a tokenizer.
-Fitting is recommended in c++ as it is faster than using the python wrapper (although the difference is minimal).
-The file generated in c++ can easily be later loaded in python for use with other python libraries (such as pytorch, tensorflow and others.)
+The algorithm used by the fit method is the iterative greedy BPE algorithm proposed in [this paper](https://arxiv.org/abs/2306.16837).
+The algorithm runs (at least for now) on only one thread, but is more than fast enough for my use case.
 
-Compile the fit.cpp file with the bpe.cpp file and link with the pcre2-8 library.
-Compiler optimizations are recommended as they can significantly speed up the program.
+I trained a tokenizer on 200 books from the [gutenberg dataset](https://shibamoulilahiri.github.io/gutenberg_dataset.html) (scraped from the [gutenberg project](https://www.gutenberg.org/)).
+The file was around 67 Mib (70M characters), and a vocab size of 131072 (2^17). The training took about 1 minute and 40 seconds.
 
+
+to use that, you can just compile the fit.cpp file and the bpe.cpp file.
+Compiler optimizations are recommended.
 Example (gcc):
 ```
-gcc src/fit.cpp src/bpe.cpp -O3 -lpcre2-8 -o fit
+gcc src/bpe.cpp src/fit.cpp -O3 -o fit
 ```
 Then run the program:
 ```
 ./fit
 ```
-It will ask a bunch of questions (regex pattern to use, file to fit on, vocab size and number of threads to use) and finally generate a `tokenizer.bpe' file.
 
-### How to use pre-trained tokenizers:
-
-As for fitting, I provided a little helper script to do just that in c++.
+### How to test the encoder:
+I also provided an encode.cpp file, that loads a `tokenizer.bpe` file in the current directory and uses it to encode whatever you put into it.
+Again, compile the encode.cpp file with the bpe.cpp file and run the program.
 Example (gcc):
 ```
-gcc src/encode.cpp src/bpe.cpp -O3 -lpcre2-8 -o encode
+gcc src/encode.cpp src/bpe.cpp -O3 -o encode
 ```
-Then run the program:
+And run:
 ```
 ./encode
 ```
 
-It will automatically load the file "tokenizer.bpe" from the current directory.
+### How to use the python wrapper:
+Fitting with the python wrapper is possible but not recommended.
 
-### Usage in python:
-
-For use in python, first install the pybind11 package.
-You can either use pip or your distribution's package manager (if you can).
-```
-pip install pybind11
-```
-If you are using pyenv, using pip might not work.
-Read the [pybind11 docs](https://pybind11.readthedocs.io/en/stable/installing.html) for further info.
-
-Then, set up the python module.
+To use the python wrapper, install the pybind11 package. Follow the [installation guide](https://pybind11.readthedocs.io/en/stable/installing.html) for further information.
+Then, run this command:
 ```
 python3 setup.py build_ext --inplace
 ```
-This command will generate a .so file (on Mac and Linux) or a .pyd file (on Windows) and an extra build directory.
-The build directory contains intermediate files and can be ignored.
-Now you can simply move the .so or .pyd file to your project directory and use it as pybpe.
-
-Example python file:
-```
-from pybpe import BPE
-
-bpe = BPE(8) # Number of threads to use
-bpe.load("tokenizer.bpe")
-
-while True:
-    encoded = bpe.encode(input("Text:\n"))
-    decoded_list = []
-    for token in encoded:
-        try:
-            decoded_list.append(bpe.decode([token]))
-        except: # UnicodeDecodeError
-            decoded_list.append('� ')
-
-    decoded = bpe.decode(encoded)
-
-    print(encoded)
-    print(decoded_list)
-    print(decoded)
-```
-Although fitting with the python wrapper is possible, it is recommended to fit with c++ for performance reasons.
+After running this command, there should be a build directory and a .so (or .pyd on windows) file in your current directory.
+I provided an encode.py file to test the python wrapper. (See the docs below for the available methods)
 
 > [!NOTE]
 > Decoding tokens that encode unicode characters using the python wrapper is not fully supported.
@@ -89,19 +60,20 @@ Although fitting with the python wrapper is possible, it is recommended to fit w
 > That is a problem especially when trying to decode (valid) utf-8 tokens one at a time, since the unicode byte sequence might be chopped off and become invalid.
 > To fix this, you can wrap the decode function in a try except block and handle the error from there (like in the demo I provided).
 
+## Documentation
 
 ### .bpe files:
 
 .bpe files are the files used by bpe.cpp to save and load tokenizers (JSON support coming soon).
 Here is an example .bpe file:
 ```
-'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+
+' -_!?.:;,<>()[]{}=
 258
 32 32
 256 256
 ```
-The first line is the regex pattern used by the tokenizer to split the words.
-The second line specifies the vocab size (minimum 256).
+The first line is the list of characters that split the text into words.
+The second line specifies the vocab size (minimum 257).
 The next lines specify the merges of the byte pair encoder, in this case:
 `32 32` means "Merge char number 32 (a space) with char number 32 (another space)".
 `256 256` means "Merge token number 256 (the 2 spaces created earlier) with token 256 (the same token)".
@@ -112,51 +84,58 @@ The vocab for this bpe consists in all the unicode characters (From 0 to 255), p
 
 I hope the explanation was clear.
 
-bpe.cpp doesn't support JSON yet (for tiktoken), but it probably will in the future (hopefully after my summer vacation :) ).
+bpe.cpp doesn't support JSON yet (like tiktoken), but it probably will in the future (hopefully after my summer vacation :P).
 
 ### Class methods:
 
-```void BPE::BPE(const size_t numThreads);```
+```void BPE::BPE();```
 
 The constructor for the BPE.
-Takes in the number of threads to use.
 
 ```void BPE::Load(const std::string& path);```
 
 Loads a .bpe file.
 This function takes in the path to a custom .bpe file and loads it to a BPE class.
 
-```void BPE::LoadRegex(const std::string& regexText);```
+```void BPE::LoadSplitLetters(const std::string& splitLetters);```
 
-Loads a custom regex.
-This funtion takes in a PCRE2 regex pattern, compiles it, and stores it in the BPE for later use.
+Loads the split letters.
+This funtion takes in a list of characters (string) and stores it in the BPE as an unordered set for later use.
 
-```void BPE::Fit(const size_t vocabSize, const std::string& dataPath, const size_t numThreads);```
+```void BPE::Fit(const size_t vocabSize, const std::string& path);```
 
 Fit the BPE to a text file.
 This function takes in 2 arguments:
  - The vocab size, the number of tokens used by the encoder.
- - The data path, the path to the text file for custom fitting
+ - The path to the text file for custom fitting
 
-```void BPE::Save(const std::string& path);```
+```void BPE::Save(const std::string& path) const;```
 
 Saves the BPE to a .bpe file.
 This function takes in a path for saving the BPE to a .bpe file.
 
-    ```std::vector<unsigned int> BPE::Encode(const std::string& text);```
+```TokenList BPE::Encode(const std::string& text) const;```
 
-Encodes the given string to a vector of tokens.
+Encodes the given string to a linked list of tokens.
 
-```std::string BPE::Decode(const std::vector<unsigned int>& tokens);```
+```std::string BPE::Decode(const TokenList& tokens) const;```
 
-Decodes the given vector of tokens back to a string.
+Decodes the given linked list of tokens back to a string.
+
+```std::string BPE::DecodeFromVector(const std::vector<uint32_t>& tokens) const;```
+
+Decodes the given vector of tokens back to a string (used in the python wrapper).
+
+```std::vector<uint32_t> BPE::EncodeToVector(const std::string& text) const;```
+
+Encodes the given string to a vector of tokens (used in the python wrapper).
 
 ## The boring stuff:
 I made this because I wanted to train my own Byte Pair Encoder on the Gutenberg dataset. I started by using Andrej Karpathy's minbpe, but my PC is simply too slow.
 I then realized that the problem was python, so I switched to pypy for better performance. Although it got much better, it was still nowhere near what I needed.
 So I realized that rewriting it in a lower level language like c++ would give me finer optimization control. And that's exactly what happened.
 
-What would take days on pypy now takes just a few hours (and much less electricity) in c++. If you want to try out my own pre-trained tokenizer trained on a subset of the gutenberg dataset, it's on the [releases page](https://github.com/amosdevstudio/bpe.cpp/releases/tag/pre-trained).
+What would take days on pypy now takes just a few minutes (and much less electricity) in c++. If you want to try out my own pre-trained tokenizer trained on a subset of the gutenberg dataset, it's on the [releases page](https://github.com/amosdevstudio/bpe.cpp/releases/tag/pre-trained).
 
 
 I am fairly new to c++ programming, so don't kill me if my code is garbage. Any feedback is very appreciated :).
