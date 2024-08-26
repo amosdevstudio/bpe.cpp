@@ -1,8 +1,27 @@
+/*
+    bpe.cpp - A simple, fast and multithreaded Byte Pair Encoder written in c++ with python bindings.
+    Copyright (C) 2024  Lorenzo Amos Sanzullo
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 #ifndef DATASTRUCTURES_HPP
 #define DATASTRUCTURES_HPP
 
 #include <cassert>
 #include <cstdint>
+#include <cstddef>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -39,6 +58,13 @@ public:
     inline TokenNode* tail() const { return m_Tail; }
 
     inline TokenList():m_Tail(nullptr), m_Head(nullptr), m_Size(0){}
+    inline TokenList(uint32_t token){
+        m_Tail = nullptr;
+        m_Head = nullptr;
+        m_Size = 0;
+
+        Append(token);
+    }
 
     inline void DeleteContents(){
         while(m_Size > 0){
