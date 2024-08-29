@@ -3,4 +3,3 @@
 data
 build
 tokenizer.bpe
-encode.py
