@@ -53,6 +53,8 @@ private:
     TokenNode* m_Tail;
 
 public:
+    std::vector<TokenNode*> checkpoints;
+
     inline size_t size() const { return m_Size; }
     inline TokenNode* head() const { return m_Head; }
     inline TokenNode* tail() const { return m_Tail; }
@@ -83,6 +85,17 @@ public:
         m_Tail->next = new TokenNode{.val=val, .prev=m_Tail, .next=nullptr};
         m_Tail = m_Tail->next;
         ++m_Size;
+    }
+
+    inline void AppendList(const TokenList& tokens){
+        if(m_Size == 0){
+            m_Head = tokens.head();
+            m_Tail = tokens.tail();
+        } else {
+            m_Tail->next = tokens.head();
+            m_Tail = tokens.tail();
+        }
+        m_Size += tokens.size();
     }
 
     inline void PopFront(){
@@ -227,11 +240,23 @@ public:
 
     inline const size_t size() const { return m_Nodes.size(); }
     inline HeapNode* GetNode(const size_t idx) const { return m_Nodes[idx]; }
+    inline size_t LastNonLeafIdx() const { return m_Nodes[size()-1]->ParentIdx(); }
 
-    inline void AddNode(HeapNode* node){
+    inline void MakeHeap(){
+        size_t lastNonLeaf = LastNonLeafIdx();
+        for(size_t i = 0; i <= lastNonLeaf; ++i){
+            HeapifyDown(m_Nodes[lastNonLeaf-i]);
+        };
+    }
+
+    inline void AddNodeNoHeapify(HeapNode* node){
         m_Nodes.push_back(node);
         node->SetIdx(size()-1);
         m_PairMap[node->pair()] = node;
+    }
+
+    inline void AddNode(HeapNode* node){
+        AddNodeNoHeapify(node);
         HeapifyUp(node);
     }
 
@@ -246,6 +271,25 @@ public:
     inline void RemoveNode(HeapNode* node){
         m_PairMap.erase(node->pair());
         delete node;
+    }
+
+    inline void AddPositionNoHeapify(TokenNode* token){
+        if(token == nullptr || token->next == nullptr || token->val == 0 || token->next->val == 0){
+            return;
+        }
+
+        TokenPair pair{token->val, token->next->val};
+
+        auto iter = m_PairMap.find(pair);
+        if(iter == m_PairMap.end()){
+            /* Create new item */
+            HeapNode* node = new HeapNode(pair, size());
+            node->AddPosition(token);
+            AddNodeNoHeapify(node);
+            return;
+        }
+        HeapNode* node = iter->second;
+        node->AddPosition(token);
     }
 
     inline void AddPosition(TokenNode* token){

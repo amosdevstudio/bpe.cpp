@@ -39,9 +39,12 @@ void ReadFile(const string& path, string& output){
 void CountTokens(const TokenList& tokens, Heap& heap){
     TokenNode* token = tokens.head();
     while(token->next != nullptr){
-        heap.AddPosition(token);
+        heap.AddPositionNoHeapify(token);
         token = token->next;
     }
+
+    cout << "Making Heap..." << endl;
+    heap.MakeHeap();
 }
 
 void BPE::BuildVocab(){
