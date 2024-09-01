@@ -273,48 +273,39 @@ public:
         delete node;
     }
 
-    inline void AddPositionNoHeapify(TokenNode* token){
+    inline HeapNode* AddPositionNoHeapify(TokenNode* token){
         if(token == nullptr || token->next == nullptr || token->val == 0 || token->next->val == 0){
-            return;
+            return nullptr;
         }
 
         TokenPair pair{token->val, token->next->val};
 
         auto iter = m_PairMap.find(pair);
+        HeapNode* node;
         if(iter == m_PairMap.end()){
             /* Create new item */
-            HeapNode* node = new HeapNode(pair, size());
+            node = new HeapNode(pair, size());
             node->AddPosition(token);
             AddNodeNoHeapify(node);
-            return;
+        } else{
+            /* Add new position */
+            node = iter->second;
+            node->AddPosition(token);
         }
-        HeapNode* node = iter->second;
-        node->AddPosition(token);
+
+        return node;
     }
 
     inline void AddPosition(TokenNode* token){
-        if(token == nullptr || token->next == nullptr || token->val == 0 || token->next->val == 0){
-            return;
+        HeapNode* node = AddPositionNoHeapify(token);
+        if(node != nullptr){
+            HeapifyUp(node);
         }
-
-        TokenPair pair{token->val, token->next->val};
-
-        auto iter = m_PairMap.find(pair);
-        if(iter == m_PairMap.end()){
-            /* Create new item */
-            HeapNode* node = new HeapNode(pair, size());
-            node->AddPosition(token);
-            AddNode(node);
-            return;
-        }
-        HeapNode* node = iter->second;
-        node->AddPosition(token);
-        HeapifyUp(node);
     }
 
-    inline void RemovePosition(TokenNode* token){
+    inline HeapNode* RemovePositionNoHeapify(TokenNode* token){
         if(token == nullptr || token->next == nullptr || token->val == 0 || token->next->val == 0){
-            return;
+            return nullptr;
         }
 
         TokenPair pair{token->val, token->next->val};
@@ -322,13 +313,20 @@ public:
         auto iter = m_PairMap.find(pair);
         if(iter == m_PairMap.end()){
             //Didn't find the pair (no need to remove the position)
-            return;
+            return nullptr;
         }
 
         HeapNode* node = iter->second;
 
         node->RemovePosition(token);
-        HeapifyDown(node);
+        return node;
+    }
+
+    inline void RemovePosition(TokenNode* token){
+        HeapNode* node = RemovePositionNoHeapify(token);
+        if(node != nullptr){
+            HeapifyDown(node);
+        }
     }
 
     inline void Truncate(const size_t newSize){
@@ -337,8 +335,7 @@ public:
         }
 
         for(size_t i = newSize; i < size(); ++i){
-            m_PairMap.erase(m_Nodes[i]->pair());
-            delete m_Nodes[i];
+            RemoveNode(m_Nodes[i]);
         }
 
         m_Nodes.resize(newSize);
